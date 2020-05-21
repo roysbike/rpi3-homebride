@@ -1,1 +1,75 @@
+version: "2.3"
+services: 
+  homebridge: 
+    container_name: homebridge
+    image: "oznu/homebridge:debian-arm32v7"
+    environment: 
+      - TZ=Europe/Moscow
+      - PGID=1000
+      - PUID=1000
+      - HOMEBRIDGE_CONFIG_UI_PORT=8080
+      - VIRTUAL_HOST=example.com
+      - VIRTUAL_PORT=8080
+    network_mode: host
+    privileged: true
+    restart: always
+    volumes: 
+      - "./data:/homebridge"
 
+nginx-proxy: 
+    build: image/nginx
+    container_name: nginx-proxy
+    environment: 
+      - TZ=Europe/Moscow
+      - DEFAULT_HOST=example.com
+    network_mode: bridge
+    ports: 
+      - "80:80"
+      - "443:443"
+    restart: always
+    volumes: 
+      - "./nginx/conf.d/ssl:/etc/nginx/certs:ro"
+      - "./nginx/conf.d/vhost.d:/etc/nginx/vhost.d"
+      - "./nginx/www_data:/usr/share/nginx/html"
+      - "./nginx/conf.d:/etc/nginx/conf.d:rw"
+      - "/var/run/docker.sock:/tmp/docker.sock:ro"
+  
+  letsencrypt-nginx-proxy-companion: 
+    build: image/nginx_lets/
+    container_name: nginx-letsencrypt
+    network_mode: host
+    volumes: 
+      - "./nginx/conf.d/ssl:/etc/nginx/certs:rw"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    volumes_from: 
+      - nginx-proxy
+
+  mqtt: 
+    image: eclipse-mosquitto
+    network_mode: bridge
+    ports: 
+      - "1883:1883"
+      - "9001:9001"
+    volumes: 
+      - "./mqtt/config:/mosquitto/config"
+      - "./mqtt/data:/mosquitto/data"
+      - "./mqtt/log:/mosquitto/log"
+      
+    nodered: 
+    network_mode: host
+    depends_on: 
+      - mqtt
+    image: "nodered/node-red:1.0.6-12-minimal-arm32v7"
+    ports: 
+      - "1880:1880"
+    volumes: 
+      - "./nodered:/data"
+#      - "/usr/src/node-red/node_modules/
+#    links:
+#      - "homebridge"
+
+  zigbee: 
+    network_mode: bridge
+    image: koenkk/zigbee2mqtt
+    volumes: 
+      - "./zigbee:/app/data"
